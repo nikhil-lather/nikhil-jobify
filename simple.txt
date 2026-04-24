@@ -1,0 +1,212 @@
+// jwt workflow
+🔐 What is JWT?
+JWT = JSON Web Token. It's just a secure way to say:
+
+"I know who you are because you have a token I gave you when you logged in."
+
+A JWT looks like this:
+eyJhbGciOiJIUzI1NiJ9.eyJ1c2VySWQiOiIxMjMiLCJyb2xlIjoidXNlciJ9.abc123signature
+It has 3 parts separated by dots:
+PartContainsHeaderalgorithm used (HS256)Payloadyour data (userId, role)Signaturesecret-signed hash to prevent tampering
+
+🔄 The Full Flow in Jobify
+Step 1 — Register/Login → createJWT
+js// authController.js (login)
+const token = createJWT({ userId: user._id, role: user.role });
+//                         👆 this data gets packed INTO the token
+js// tokenUtils.js
+export const createJWT = (payload) => {
+  const token = jwt.sign(payload, process.env.JWT_SECRET, {
+    expiresIn: process.env.JWT_EXPIRES_IN, // e.g. '1d'
+  });
+  return token;
+};
+
+jwt.sign() takes your data (userId, role), encrypts + signs it with your JWT_SECRET
+Produces a token string
+JWT_SECRET is like a password only your server knows — if anyone tampers with the token, the signature breaks
+
+
+Step 2 — Token is stored in a Cookie
+js// authController.js (login)
+res.cookie('token', token, { httpOnly: true });
+
+The token is saved in the browser/Postman as a cookie
+httpOnly: true means JavaScript can't access it — only the server can
+Every subsequent request automatically sends this cookie
+
+
+Step 3 — Protected Route is Hit
+GET /api/v1/jobs  →  authenticateUser middleware runs first
+
+Step 4 — authenticateUser reads & verifies the token
+js// authMiddleware.js
+export const authenticateUser = async (req, res, next) => {
+  const { token } = req.cookies;       // 1. grab token from cookie
+  if (!token) {
+    throw new UnauthenticatedError("authentication invalid");
+  }
+  try {
+    const { userId, role } = verifyJWT(token);  // 2. decode & verify
+    req.user = { userId, role };                // 3. attach to request
+    next();                                     // 4. move on
+  } catch (error) {
+    throw new UnauthenticatedError("authentication invalid");
+  }
+};
+js// tokenUtils.js
+export const verifyJWT = (token) => {
+  const decoded = jwt.verify(token, process.env.JWT_SECRET);
+  // 👆 uses same JWT_SECRET to verify signature
+  // if token is fake or expired → throws error → caught above
+  return decoded; // returns { userId, role, iat, exp }
+};
+
+Step 5 — req.user is available everywhere after
+js// jobController.js
+const jobs = await Job.find({ createdBy: req.user.userId }); // ✅
+js// validationMiddleware.js
+const isAdmin = req.user.role === "admin"; // ✅
+const isOwner = job.createdBy.toString() === req.user.userId; // ✅
+
+🗺️ Visual Flow
+REGISTER/LOGIN
+     ↓
+createJWT({ userId, role })
+     ↓
+token stored in cookie 🍪
+     ↓
+every request sends cookie automatically
+     ↓
+authenticateUser middleware
+     ↓
+verifyJWT(token) → { userId, role }
+     ↓
+req.user = { userId, role }
+     ↓
+controller/validation uses req.user ✅
+
+🔑 Why JWT_SECRET matters
+JWT_SECRET=somesupersecretkey  ← in .env
+
+Used to sign the token when created
+Used to verify the token on every request
+If someone steals the token but not the secret → they still can't forge new ones
+If secret leaks → regenerate it and all existing tokens become invalid
+
+
+Simple analogy
+
+Think of JWT like a festival wristband. The gate (login) gives you a wristband (token) with your name and VIP status on it. Every stall (protected route) checks your wristband (authenticateUser) instead of asking you to log in again. If someone fakes a wristband, the UV light (JWT_SECRET) catches it.
+
+That's the entire JWT flow in Jobify! Want me to explain anything deeper?
+
+// axios 
+
+what is axios and how does this work like customfetch like all this workflow how does this work and also this  await customFetch.post("/auth/register", data); explain the full worl flow3:14 PMGreat question! Let me explain the full frontend workflow from top to bottom.
+
+🌐 What is Axios?
+Axios is a HTTP client for the browser — it lets your React frontend talk to your Express backend.
+Think of it like Postman but in your code. Instead of you manually hitting routes in Postman, your React app does it automatically.
+
+📦 What is customFetch?
+Instead of using raw axios everywhere, you create a custom axios instance with preset config:
+js// utils/customFetch.js
+import axios from "axios";
+
+const customFetch = axios.create({
+  baseURL: "/api/v1", // ✅ prepended to every request automatically
+});
+
+export default customFetch;
+So now instead of writing:
+jsaxios.post("http://localhost:3000/api/v1/auth/register", data) // ❌ long
+You write:
+jscustomFetch.post("/auth/register", data) // ✅ clean
+
+🔄 Full Flow of customFetch.post("/auth/register", data)
+Step 1 — User fills the form in React
+jsx// Register.jsx
+const data = {
+  name: "John",
+  email: "john@gmail.com",
+  password: "12345678",
+  role: "user"
+}
+Step 2 — customFetch.post fires
+jsawait customFetch.post("/auth/register", data);
+//                      👆 becomes → POST http://localhost:3000/api/v1/auth/register
+//                                         👆 data sent as JSON in request body
+Axios automatically:
+
+Sets Content-Type: application/json
+Serializes data object to JSON string
+Sends the HTTP request to your backend
+
+Step 3 — Express receives it
+js// server.js
+app.use("/api/v1/auth", authRouter); // ✅ matches
+js// authRouter.js
+router.post("/register", validateRegisterInput, register); // ✅ matches
+Step 4 — Validation runs first
+js// validationMiddleware.js
+validateRegisterInput // checks name, email, password etc
+// if invalid → throws BadRequestError → axios catches it as error
+// if valid → next() → goes to register controller
+Step 5 — Register controller runs
+js// authController.js
+export const register = async (req, res) => {
+  const isFirstAccount = (await User.countDocuments()) === 0;
+  req.body.role = isFirstAccount ? "admin" : "user";
+  const user = await User.create(req.body);       // saved to MongoDB
+  const token = createJWT({ userId: user._id, role: user.role });
+  res.cookie("token", token, { httpOnly: true }); // cookie sent back
+  res.status(201).json({ msg: "user created" });  // response sent back
+};
+Step 6 — Response comes back to React
+js// Register.jsx
+try {
+  await customFetch.post("/auth/register", data); // ✅ success
+  navigate("/dashboard"); // redirect user
+} catch (error) {
+  console.log(error.response.data.msg); // ❌ show error message
+}
+
+🗺️ Visual Flow
+React Form (user types)
+       ↓
+customFetch.post("/auth/register", data)
+       ↓
+axios adds baseURL → POST /api/v1/auth/register
+       ↓
+Express server receives request
+       ↓
+validateRegisterInput middleware
+       ↓ (if valid)
+register controller
+       ↓
+User.create() → saved to MongoDB 🍃
+       ↓
+createJWT() → token created 🔐
+       ↓
+res.cookie() → token stored in browser 🍪
+       ↓
+res.json({ msg: "user created" })
+       ↓
+axios receives response
+       ↓
+React handles success → navigate to dashboard ✅
+
+Why await?
+Because HTTP requests take time — they go over the network. await pauses until the response comes back:
+js// without await ❌ — doesn't wait, crashes
+customFetch.post("/auth/register", data);
+navigate("/dashboard"); // runs immediately before response!
+
+// with await ✅ — waits for response first
+await customFetch.post("/auth/register", data);
+navigate("/dashboard"); // runs only after success
+
+Simple analogy
+
+customFetch is like a pre-addressed envelope. You just put the letter (data) in, write the last part of the address (/auth/register), and send it. Axios handles the rest — delivery, format, and bringing back the reply.
