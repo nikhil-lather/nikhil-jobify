@@ -210,3 +210,41 @@ navigate("/dashboard"); // runs only after success
 Simple analogy
 
 customFetch is like a pre-addressed envelope. You just put the letter (data) in, write the last part of the address (/auth/register), and send it. Axios handles the rest — delivery, format, and bringing back the reply.
+
+question
+
+ PROJECT: Jobify – Full Stack Job Tracking App
+Walk me through the complete architecture of Jobify. How do frontend, backend, and database interact?
+
+How did you implement JWT authentication? Explain the token flow (access token, refresh token if any).
+
+What is role-based authorization? How did you enforce it on both frontend and backend?
+
+How did you protect routes in React? Show me the code logic for your Protected Route component.
+
+How did you implement filtering, sorting, and pagination on the backend? Write a sample Mongoose query.
+
+What is the MVC pattern? Draw the folder structure and explain what each layer does.
+
+How did you handle custom error handling middleware in Express? Show an example.
+
+How did you integrate Recharts? What data are you visualizing? Explain the chart components you used.
+
+How did you implement the dark/light theme toggle? How does the theme state persist across reloads?
+
+What goes into the admin panel? How does it differ from a regular user's dashboard?
+
+How did you deploy this on Render? What were the challenges (cold starts, environment variables, etc.)?
+
+What is your database schema for jobs and users? Show me the Mongoose models.
+
+How do you handle state management in React? Did you use Context API, Redux, or something else?
+
+Explain CRUD operations end-to-end for a job entry — from button click to database update.
+
+What HTTP status codes do you return for different scenarios?
+
+
+
+- Loaders (data fetching before render)
+- Actions (form submissions/mutations)
